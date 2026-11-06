@@ -1,40 +1,42 @@
-# SecPulse: how to get it on your phone
+# SecPulse: how to install it
 
-SecPulse is a web app (PWA). It installs from the browser like an app, with an icon and no browser bars.
-
-## The catch: it has to be on an https address
-A phone will only install it, and the password check only works, when the app comes from an **https://** address.
-Your PC serves it as `http://localhost:8080`, and that only counts as safe on the PC itself.
-So it has to be put online once. The free, boring way is **GitHub Pages** on your GitHub account
-(about 5 minutes; Claude can do it once you say yes). It's a static page: no server, no accounts, no data collected.
+**Phone address:** https://doomsday-789.github.io/secpulse/
 
 ## Android (Chrome)
-1. Open the https address in **Chrome**.
+1. Open the address above in **Chrome**.
 2. Tap **⋮** (top right), then **Install app** (or **Add to Home screen**).
 3. Open SecPulse from the new icon.
 
 ## iPhone (Safari)
-1. Open the https address in **Safari** (it has to be Safari).
+1. Open the address above in **Safari** (it has to be Safari).
 2. Tap **Share** (square with an arrow), then **Add to Home Screen**, then **Add**.
 3. Open SecPulse from the new icon.
 
-## Phone alerts (optional)
+## Windows PC
+- **The .exe:** `dist\SecPulse 1.0.0.exe` in this folder. Double-click it; nothing to install.
+  The first time, Windows may say "Windows protected your PC" because the file isn't signed (signing costs money).
+  Click **More info**, then **Run anyway**.
+- Or open the phone address in Chrome on the PC and click the install icon in the address bar.
+
+## Phone alerts
+Your PC checks every 3 hours (Task Scheduler task "SecPulse check", no window) and sends anything new to your phone.
 1. Install the free **ntfy** app (Play Store / App Store). No account needed.
-2. In SecPulse go to **Alerts** and copy the topic name (it looks like `secpulse-1a2b3c...`).
-3. In ntfy tap **+**, paste the topic, **Subscribe**.
-4. In SecPulse tap **Send test alert**. It should buzz your phone.
-5. Tap **Push what's new and mark read** whenever you want a summary sent.
+2. In ntfy tap **+**, type your topic, then **Subscribe**. The topic is the `"topic"` line in `check-config.json`
+   in this folder (kept off GitHub on purpose, since anyone with the name can read the alerts).
+3. Test it from a terminal in this folder: `node check.mjs --test`.
 
-Anyone who knows the topic name can read the alerts, so keep the random one. They only ever contain public breach and CVE news.
+Only runs while the PC is on and the F: drive is connected (your `node` lives at F:\N8N).
+What it watches: `check-config.json` in this folder (topic, stack, watch, severity). `lastRun`/`lastResult` there show the last check.
+The app's own **Alerts** tab has its own random topic. Paste the topic above into it to get everything on one ntfy topic.
+Anyone who knows the topic name can read the alerts; they only ever contain public breach and CVE news.
 
-## Use it on the PC right now
-In a terminal: `cd C:\Users\Entro\Documents\SecPulse` then `npm start`, and open http://localhost:8080 in Chrome.
-Chrome shows an install icon in the address bar, so it works as a desktop app too.
-Self-test for the password check: `npm test`.
+## Commands (in this folder)
+- `npm test`: password-check and "what's new" self-test
+- `npm run check`: run the PC check now
+- `npm run exe`: rebuild the .exe after changing the app
+- `npm start`: serve the app at http://localhost:8080
+- To update the phone version: commit and push to GitHub; the page updates within a minute.
 
-## What it does NOT do (yet)
-- **Check while it's closed.** A web app can't wake itself up. A scheduled check needs something always on
-  (a Windows scheduled task on your PC, or a free GitHub scheduled job). Ask if you want that.
-- **.apk / .exe / iPhone app files.** An Android .apk (Capacitor) and a Windows .exe (Electron) can be built on this PC.
-  A real iPhone app file (.ipa) needs a Mac, or a paid cloud build service plus an Apple developer account ($99/year).
-  On iPhone, Add to Home Screen above is the practical route.
+## Not done
+- **iPhone app file (.ipa):** needs a Mac, or a paid cloud build plus an Apple developer account ($99/year). Add to Home Screen is the practical route.
+- **Android .apk:** possible with Capacitor if the installed web app ever feels lacking.
