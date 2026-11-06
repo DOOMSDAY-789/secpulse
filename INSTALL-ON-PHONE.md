@@ -7,6 +7,13 @@
 2. Tap **⋮** (top right), then **Install app** (or **Add to Home screen**).
 3. Open SecPulse from the new icon.
 
+### Or the Android app file (APK)
+`dist\SecPulse.apk` in this folder (4 MB).
+1. Copy it to the phone (USB cable, Google Drive, or email it to yourself).
+2. Tap it on the phone. Android asks to allow installs from that app (Files / Drive / Gmail): allow it, then **Install**.
+3. If Play Protect warns "unknown developer", tap **More details**, then **Install anyway**. It's yours; it just isn't from the Play Store.
+It asks for internet access only. Rebuild after app changes with `npm run apk`.
+
 ## iPhone (Safari)
 1. Open the address above in **Safari** (it has to be Safari).
 2. Tap **Share** (square with an arrow), then **Add to Home Screen**, then **Add**.
