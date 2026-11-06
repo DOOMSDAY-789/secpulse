@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0f172a">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<title>SecPulse</title>
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" href="icon-192.png">
+<link rel="apple-touch-icon" href="icon-192.png">
+<style>
+  :root { --bg:#0f172a; --card:#1e293b; --line:#334155; --text:#e2e8f0; --dim:#94a3b8; --accent:#2dd4bf; --bad:#f87171; --warn:#fbbf24; --ok:#4ade80; }
+  * { box-sizing: border-box; }
+  body { margin:0; background:var(--bg); color:var(--text); font:15px/1.45 system-ui, -apple-system, Segoe UI, Roboto, sans-serif; }
+  header { position:sticky; top:0; z-index:1; display:flex; align-items:center; gap:8px; padding:calc(10px + env(safe-area-inset-top)) 16px 10px; background:var(--bg); border-bottom:1px solid var(--line); }
+  header h1 { margin:0; font-size:18px; color:var(--accent); flex:1; }
+  main { max-width:720px; margin:0 auto; padding:12px 16px calc(80px + env(safe-area-inset-bottom)); }
+  nav { position:fixed; bottom:0; left:0; right:0; display:flex; background:var(--card); border-top:1px solid var(--line); padding-bottom:env(safe-area-inset-bottom); }
+  nav button { flex:1; padding:12px 4px; background:none; border:0; color:var(--dim); font:inherit; font-size:13px; }
+  nav button[aria-selected=true] { color:var(--accent); font-weight:600; }
+  h2 { font-size:16px; margin:16px 0 6px; }
+  label { display:block; font-size:13px; color:var(--dim); margin:10px 0 4px; }
+  input, select { width:100%; padding:10px; border-radius:8px; border:1px solid var(--line); background:var(--card); color:var(--text); font:inherit; }
+  button.act { padding:10px 14px; border-radius:8px; border:0; background:var(--accent); color:#042f2e; font:inherit; font-weight:600; margin-top:10px; }
+  button.act.alt { background:var(--card); color:var(--text); border:1px solid var(--line); }
+  .card { background:var(--card); border:1px solid var(--line); border-radius:10px; padding:10px 12px; margin:8px 0; overflow-wrap:anywhere; }
+  .card b { display:block; }
+  .meta, .note { color:var(--dim); font-size:13px; }
+  .msg { white-space:pre-line; padding:10px 12px; border-radius:8px; margin:8px 0; background:var(--card); border-left:4px solid var(--accent); }
+  .msg.err { border-color:var(--bad); }
+  .tag { display:inline-block; font-size:11px; font-weight:700; padding:1px 6px; border-radius:4px; margin-right:4px; background:var(--line); }
+  .tag.new { background:var(--accent); color:#042f2e; }
+  .tag.CRITICAL, .tag.Known { background:var(--bad); color:#450a0a; }
+  .tag.HIGH { background:var(--warn); color:#422006; }
+  a { color:var(--accent); }
+  [hidden] { display:none !important; }
+</style>
+</head>
+<body>
+<header><h1>SecPulse</h1><button class="act alt" id="refresh" style="margin:0">Refresh</button></header>
+<main>
+  <section id="tab-breaches">
+    <label for="watch">Filter breaches (comma-separated site names or domains, empty = all)</label>
+    <input id="watch" placeholder="e.g. adobe, linkedin.com">
+    <div id="breaches-msg"></div>
+    <div id="breaches-list"></div>
+  </section>
+
+  <section id="tab-vulns" hidden>
+    <label for="stack">Your stack (comma-separated keywords)</label>
+    <input id="stack">
+    <label for="severity">New CVEs to show (published in the last 14 days)</label>
+    <select id="severity"><option value="CRITICAL">Critical only (9+)</option><option value="HIGH">High and critical (7+)</option><option value="ANY">Everything</option></select>
+    <h2>Being exploited right now (CISA KEV)</h2>
+    <div id="kev-msg"></div>
+    <div id="kev-list"></div>
+    <h2>New CVEs (NVD)</h2>
+    <div id="nvd-msg"></div>
+    <div id="nvd-list"></div>
+  </section>
+
+  <section id="tab-password" hidden>
+    <h2>Has this password leaked?</h2>
+    <p class="note">Your password is hashed on this device. Only the first 5 characters of the hash are sent to Have I Been Pwned, so nobody (not even them) learns the password. Nothing is saved.</p>
+    <form id="pw-form" autocomplete="off">
+      <label for="pw">Password</label>
+      <input id="pw" type="password" autocomplete="off" autocapitalize="off" spellcheck="false" required>
+      <button class="act">Check</button>
+      <button class="act alt" type="button" id="selfcheck">Self-check</button>
+    </form>
+    <div id="pw-msg"></div>
+  </section>
+
+  <section id="tab-alerts" hidden>
+    <h2>Phone alerts (ntfy)</h2>
+    <p class="note">Install the free <b>ntfy</b> app, tap +, and subscribe to the topic below. Anyone who knows the topic name can read it, so keep the random one. Messages only contain public breach and CVE news.</p>
+    <label for="topic">ntfy topic</label>
+    <input id="topic" autocapitalize="off" spellcheck="false">
+    <button class="act alt" id="test-push">Send test alert</button>
+    <button class="act" id="push-new">Push what's new and mark read</button>
+    <div id="alerts-msg"></div>
+  </section>
+</main>
+<nav>
+  <button data-tab="breaches">Hacked sites</button>
+  <button data-tab="vulns">Vulns</button>
+  <button data-tab="password">Password</button>
+  <button data-tab="alerts">Alerts</button>
+</nav>
+<script type="module" src="app.js"></script>
+</body>
+</html>

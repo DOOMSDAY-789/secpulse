@@ -1,0 +1,9 @@
+{
+  "name": "secpulse",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node test.mjs",
+    "start": "python -m http.server 8080"
+  }
+}
