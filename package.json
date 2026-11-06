@@ -12,15 +12,35 @@
     "start": "python -m http.server 8080",
     "check": "node check.mjs",
     "app": "electron .",
-    "exe": "electron-builder --win portable"
+    "exe": "electron-builder --win portable",
+    "apk": "node apk.mjs"
   },
   "build": {
     "appId": "io.github.doomsday-789.secpulse",
-    "files": ["main.js", "index.html", "app.js", "pwned.js", "feeds.js", "sw.js", "manifest.webmanifest", "icon-192.png", "icon-512.png", "package.json"],
-    "win": { "target": "portable", "icon": "icon-512.png" },
-    "directories": { "output": "dist" }
+    "files": [
+      "main.js",
+      "index.html",
+      "app.js",
+      "pwned.js",
+      "feeds.js",
+      "sw.js",
+      "manifest.webmanifest",
+      "icon-192.png",
+      "icon-512.png",
+      "package.json"
+    ],
+    "win": {
+      "target": "portable",
+      "icon": "icon-512.png"
+    },
+    "directories": {
+      "output": "dist"
+    }
   },
   "devDependencies": {
+    "@capacitor/android": "^8.6.0",
+    "@capacitor/cli": "^8.6.0",
+    "@capacitor/core": "^8.6.0",
     "electron": "^38.8.6",
     "electron-builder": "^26.18.0"
   }

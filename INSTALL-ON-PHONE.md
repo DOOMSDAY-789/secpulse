@@ -39,4 +39,4 @@ Anyone who knows the topic name can read the alerts; they only ever contain publ
 
 ## Not done
 - **iPhone app file (.ipa):** needs a Mac, or a paid cloud build plus an Apple developer account ($99/year). Add to Home Screen is the practical route.
-- **Android .apk:** possible with Capacitor if the installed web app ever feels lacking.
+- **Play Store release:** the APK is debug-signed, fine for your own phones. The Play Store needs a release key and a $25 developer account.
