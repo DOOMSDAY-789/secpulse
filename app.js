@@ -1,4 +1,5 @@
 import { pwnedCount } from './pwned.js';
+import { bannerFor, privacyChoices } from './ads.js';
 import {
   DEFAULTS, SOURCES, loadBreaches, loadKev, loadNvd, loadNvdKev, cvss, idOf, filter, isNew, summary, ntfy,
   cveLinks, kevLinks, breachLinks, checklist, day,
@@ -203,7 +204,9 @@ function showTab(name) {
   document.querySelectorAll('nav button').forEach((b) => b.setAttribute('aria-selected', b.dataset.tab === name));
   store.set('tab', name);
   if (name === 'checklist' && !data.nvdKev) loadChecklist();
+  bannerFor(name);
 }
+$('#ad-privacy').addEventListener('click', privacyChoices);
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 $('#refresh').addEventListener('click', () => { data.nvdKev = null; loadAll(); if (store.get('tab') === 'checklist') loadChecklist(); });
 

@@ -12,7 +12,7 @@
 1. Copy it to the phone (USB cable, Google Drive, or email it to yourself).
 2. Tap it on the phone. Android asks to allow installs from that app (Files / Drive / Gmail): allow it, then **Install**.
 3. If Play Protect warns "unknown developer", tap **More details**, then **Install anyway**. It's yours; it just isn't from the Play Store.
-It asks for internet access only. Rebuild after app changes with `npm run apk`.
+It asks for internet access, plus the advertising-ID permissions Google's ad library adds. It shows Google **test** ads on the feed tabs for now (no ads on the Password tab). Rebuild after app changes with `npm run apk`.
 
 ## iPhone (Safari)
 1. Open the address above in **Safari** (it has to be Safari).

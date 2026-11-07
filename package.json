@@ -1,7 +1,7 @@
 {
   "name": "secpulse",
   "productName": "SecPulse",
-  "version": "1.1.0",
+  "version": "1.2.0",
   "description": "Hacked sites, leaked passwords and new PHP/WordPress/MySQL vulnerabilities.",
   "author": "DOOMSDAY-789",
   "private": true,
@@ -21,6 +21,7 @@
       "main.js",
       "index.html",
       "app.js",
+      "ads.js",
       "pwned.js",
       "feeds.js",
       "sw.js",
@@ -39,6 +40,7 @@
     }
   },
   "devDependencies": {
+    "@capacitor-community/admob": "^8.3.0",
     "@capacitor/android": "^8.6.0",
     "@capacitor/cli": "^8.6.0",
     "@capacitor/core": "^8.6.0",
