@@ -45,3 +45,37 @@ export async function bannerFor(tab) {
 }
 
 export const privacyChoices = () => AdMob?.showPrivacyOptionsForm().catch(() => {});
+
+// Watch-an-ad: built, reward not decided yet. Google only allows real rewarded ads that give a real reward and say what it is
+// before the ad (support.google.com/admob/answer/7313578), so with real ads the button stays hidden until REWARD is set.
+const REWARD_ID = ''; // real rewarded ad unit ID from AdMob
+const REWARD = null; // e.g. { label: '24 hours without the banner', give: () => { ... } }
+export const rewardLabel = REWARD?.label || 'not decided yet (test ads only)';
+export const watchReady = !!AdMob && (TESTING || !!(REWARD && REWARD_ID));
+
+export async function watchAd() {
+  ready ??= start().catch(() => false);
+  if (!(await ready)) return 'Ads are switched off (no consent).';
+  try {
+    await AdMob.prepareRewardVideoAd({ adId: REWARD_ID, isTesting: TESTING });
+  } catch {
+    return 'No ad available right now. Try again later.';
+  }
+  return new Promise((done) => {
+    let earned = false;
+    let over = false;
+    const finish = () => {
+      if (over) return;
+      over = true;
+      subs.forEach((s) => s.then((h) => h.remove()));
+      if (!earned) done('Ad closed early, so no reward.');
+      else done(REWARD ? `Thanks! You got: ${REWARD.label}.` : 'Ad finished. The reward is not decided yet.');
+    };
+    const subs = [
+      AdMob.addListener('onRewardedVideoAdReward', () => { earned = true; REWARD?.give(); }),
+      AdMob.addListener('onRewardedVideoAdDismissed', finish), // show() never resolves if closed early, so wait for this
+      AdMob.addListener('onRewardedVideoAdFailedToShow', finish),
+    ];
+    AdMob.showRewardVideoAd().catch(finish);
+  });
+}

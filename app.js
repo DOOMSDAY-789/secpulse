@@ -1,5 +1,5 @@
 import { pwnedCount } from './pwned.js';
-import { bannerFor, privacyChoices } from './ads.js';
+import { bannerFor, privacyChoices, watchReady, watchAd, rewardLabel } from './ads.js';
 import {
   DEFAULTS, SOURCES, loadBreaches, loadKev, loadNvd, loadNvdKev, cvss, idOf, filter, isNew, summary, ntfy,
   cveLinks, kevLinks, breachLinks, checklist, day,
@@ -207,6 +207,14 @@ function showTab(name) {
   bannerFor(name);
 }
 $('#ad-privacy').addEventListener('click', privacyChoices);
+$('#watch-box').hidden = !watchReady;
+$('#watch-reward').textContent = rewardLabel;
+$('#watch-ad').addEventListener('click', async (e) => {
+  e.target.disabled = true;
+  say('watch', 'Loading an ad…');
+  say('watch', await watchAd());
+  e.target.disabled = false;
+});
 document.querySelectorAll('nav button').forEach((b) => b.addEventListener('click', () => showTab(b.dataset.tab)));
 $('#refresh').addEventListener('click', () => { data.nvdKev = null; loadAll(); if (store.get('tab') === 'checklist') loadChecklist(); });
 
