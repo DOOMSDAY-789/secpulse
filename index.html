@@ -35,6 +35,15 @@
   .tag.CRITICAL, .tag.Known { background:var(--bad); color:#450a0a; }
   .tag.HIGH { background:var(--warn); color:#422006; }
   a { color:var(--accent); }
+  .links { display:flex; flex-wrap:wrap; gap:6px; margin-top:8px; }
+  a.btn { font-size:13px; padding:5px 10px; border:1px solid var(--line); border-radius:999px; text-decoration:none; background:var(--bg); }
+  details { margin-top:8px; font-size:14px; }
+  summary { cursor:pointer; color:var(--accent); }
+  details ol { margin:6px 0; padding-left:20px; }
+  input[type=checkbox] { width:auto; accent-color:var(--accent); transform:scale(1.2); margin-right:6px; }
+  label.tick { display:flex; align-items:center; color:var(--text); font-size:14px; margin:10px 0 0; }
+  .card.done { opacity:.6; }
+  .switch { display:flex; align-items:center; gap:4px; color:var(--text); font-size:15px; }
   [hidden] { display:none !important; }
 </style>
 </head>
@@ -73,7 +82,16 @@
     <div id="pw-msg"></div>
   </section>
 
-  <section id="tab-alerts" hidden>
+  <section id="tab-checklist" hidden>
+    <h2>Patch checklist <span class="tag">EXPERIMENTAL</span></h2>
+    <p class="note">Bugs being exploited for your stack, plus this fortnight's new CVEs at your chosen severity.
+      🟢 a patch exists · 🟡 only an advisory or workaround · 🔴 checked, no fix link yet · ⚪ NVD hasn't checked it (true of most new WordPress plugin bugs), so open its links.
+      This shows whether a fix <b>exists</b>, not whether your own sites have it. Tick an item once you've patched it; ticks stay on this device.</p>
+    <div id="checklist-msg"></div>
+    <div id="checklist-list"></div>
+  </section>
+
+  <section id="tab-more" hidden>
     <h2>Phone alerts (ntfy)</h2>
     <p class="note">Install the free <b>ntfy</b> app, tap +, and subscribe to the topic below. Anyone who knows the topic name can read it, so keep the random one. Messages only contain public breach and CVE news.</p>
     <label for="topic">ntfy topic</label>
@@ -81,13 +99,28 @@
     <button class="act alt" id="test-push">Send test alert</button>
     <button class="act" id="push-new">Push what's new and mark read</button>
     <div id="alerts-msg"></div>
+
+    <h2>Experimental</h2>
+    <label class="switch"><input type="checkbox" id="exp-checklist"> Patch checklist tab</label>
+    <p class="note">Trial features. They may change or be removed.</p>
+
+    <h2>About</h2>
+    <p class="note">SecPulse 1.1 · no account, no tracking. Settings stay on this device.
+      <a href="https://doomsday-789.github.io/secpulse/privacy.html" target="_blank" rel="noopener">Privacy policy</a></p>
+    <p class="note">Breach data: <a href="https://haveibeenpwned.com" target="_blank" rel="noopener">Have I Been Pwned</a>
+      (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>).
+      Password check: <a href="https://haveibeenpwned.com/Passwords" target="_blank" rel="noopener">Pwned Passwords</a>.
+      Exploited bugs: <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener">CISA KEV catalog</a>.
+      Alerts: <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy.sh</a>.</p>
+    <p class="note">This product uses the NVD API but is not endorsed or certified by the NVD.</p>
   </section>
 </main>
 <nav>
   <button data-tab="breaches">Hacked sites</button>
   <button data-tab="vulns">Vulns</button>
   <button data-tab="password">Password</button>
-  <button data-tab="alerts">Alerts</button>
+  <button data-tab="checklist" id="nav-checklist" hidden>Checklist</button>
+  <button data-tab="more">More</button>
 </nav>
 <script type="module" src="app.js"></script>
 </body>

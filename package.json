@@ -1,7 +1,7 @@
 {
   "name": "secpulse",
   "productName": "SecPulse",
-  "version": "1.0.0",
+  "version": "1.1.0",
   "description": "Hacked sites, leaked passwords and new PHP/WordPress/MySQL vulnerabilities.",
   "author": "DOOMSDAY-789",
   "private": true,
@@ -27,6 +27,7 @@
       "manifest.webmanifest",
       "icon-192.png",
       "icon-512.png",
+      "privacy.html",
       "package.json"
     ],
     "win": {

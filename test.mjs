@@ -1,7 +1,7 @@
 // Self-check for the password leak check. Run: node test.mjs
 import assert from 'node:assert/strict';
 import { sha1Hex, countInRange, pwnedCount } from './pwned.js';
-import { cvss, summary, filter } from './feeds.js';
+import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist } from './feeds.js';
 
 // Known SHA-1 of "password".
 assert.equal(await sha1Hex('password'), '5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8');
@@ -41,7 +41,44 @@ assert.match(lines[2], /^1 new CVE\(s\): CVE-1 \(9\.8\)$/, 'medium CVE is below 
 assert.deepEqual(summary(feed, s, { breaches: ['Old', 'Fresh'], kev: ['CVE-9', 'CVE-8'], nvd: ['CVE-1', 'CVE-2'] }), [], 'all seen');
 assert.equal(filter('breaches', feed.breaches, { ...s, watch: 'fresh.com' }).length, 1);
 
+// Help links: only real http(s) links from the feeds, labelled by NVD's tags.
+const refCve = { id: 'CVE-7', references: [
+  { url: 'https://example.com/fix', tags: ['Patch'] },
+  { url: 'https://example.com/fix', tags: ['Patch', 'Vendor Advisory'] },
+  { url: 'javascript:alert(1)', tags: ['Patch'] },
+  { url: 'https://vendor.example/advisory', tags: ['Vendor Advisory'] },
+  { url: 'https://blog.example/post', tags: ['Third Party Advisory'] },
+] };
+assert.deepEqual(cveLinks(refCve).map((l) => `${l.label} ${l.url}`), [
+  'Patch https://example.com/fix',
+  'Vendor advisory https://vendor.example/advisory',
+  'NVD https://nvd.nist.gov/vuln/detail/CVE-7',
+], 'dedupes, drops non-web links and untagged blogs, NVD last');
+assert.deepEqual(kevLinks({ cveID: 'CVE-8', notes: 'See: https://www.php.net/ ; https://www.cisa.gov/a/b. Also javascript:x' }).map((l) => l.label),
+  ['php.net', 'cisa.gov', 'NVD'], 'notes links by site name, trailing dot trimmed');
+assert.equal(breachLinks({ Name: 'Big Co' })[0].url, 'https://haveibeenpwned.com/Breach/Big%20Co');
+
+// Patch status from tags.
+assert.equal(patchStatus(refCve), 'patched');
+assert.equal(patchStatus({ references: [{ url: 'https://x', tags: ['Mitigation'] }] }), 'semi');
+assert.equal(patchStatus({ references: [{ url: 'https://x', tags: ['Vendor Advisory'] }] }), 'semi');
+assert.equal(patchStatus({ references: [{ url: 'https://x', tags: ['Exploit'] }] }), 'pending');
+assert.equal(patchStatus({ vulnStatus: 'Deferred', references: [{ url: 'https://x' }] }), 'unchecked', 'untagged links say nothing');
+
+// Checklist: open items first (pending, then semi, then patched), ticked at the bottom, overdue CISA dates flagged.
+const rows = checklist([
+  { id: 'A', published: '2026-11-01', references: [{ url: 'https://x', tags: ['Patch'] }] },
+  { id: 'B', published: '2026-11-02', references: [] },
+  { id: 'C', published: '2026-10-01', cisaExploitAdd: '2026-10-29', cisaActionDue: '2026-11-01', references: [{ url: 'https://x', tags: ['Mitigation'] }] },
+  { id: 'D', published: '2026-11-03', references: [] },
+  { id: 'B', published: '2026-11-02', references: [] },
+], { D: '2026-11-07' }, '2026-11-07');
+assert.deepEqual(rows.map((r) => r.id), ['B', 'C', 'A', 'D'], 'deduped and ordered');
+assert.equal(rows.find((r) => r.id === 'C').overdue, true);
+assert.equal(rows.find((r) => r.id === 'D').ticked, '2026-11-07');
+assert.equal(checklist([{ id: 'OLD', published: '2021-01-01', cisaActionDue: '2021-11-17', references: [] }], {}, '2026-11-07')[0].overdue, false, 'years-old deadline is not flagged');
+
 // Live call against the real API.
 const live = await pwnedCount('password');
 assert.ok(live > 1000, `"password" should be heavily leaked, got ${live}`);
-console.log(`ok - 18 checks passed (live: "password" seen ${live.toLocaleString()} times)`);
+console.log(`ok - 30 checks passed (live: "password" seen ${live.toLocaleString()} times)`);

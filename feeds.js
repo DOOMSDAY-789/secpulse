@@ -27,20 +27,26 @@ export async function loadKev() {
   return j.vulnerabilities.sort((a, b) => b.dateAdded.localeCompare(a.dateAdded));
 }
 
-export async function loadNvd(stack) {
-  const end = new Date();
-  const start = new Date(end - 14 * 864e5);
+// ponytail: one request per keyword; NVD allows 5 per 30 s without an API key, so keep the stack list short.
+async function nvdByKeyword(stack, extra) {
   const found = new Map();
-  // ponytail: one request per keyword; NVD allows 5 per 30 s without an API key, so keep the stack list short.
-  // No server-side cvssV3Severity filter: it only sees NVD's own scores and misses ~95% of WordPress CVEs
-  // (those are scored by Wordfence etc.), so severity is filtered here from every scorer instead.
   for (const word of keywords(stack)) {
-    const q = new URLSearchParams({ keywordSearch: word, pubStartDate: start.toISOString(), pubEndDate: end.toISOString(), resultsPerPage: '2000' });
+    const q = new URLSearchParams({ keywordSearch: word, resultsPerPage: '2000', ...extra });
     const j = await getJSON(`https://services.nvd.nist.gov/rest/json/cves/2.0?${q}`, 'NVD');
     for (const v of j.vulnerabilities) found.set(v.cve.id, v.cve);
   }
   return [...found.values()].sort((a, b) => b.published.localeCompare(a.published));
 }
+
+// CVEs published in the last 14 days. No server-side cvssV3Severity filter: it only sees NVD's own scores and
+// misses ~95% of WordPress CVEs (those are scored by Wordfence etc.), so severity is filtered here from every scorer.
+export function loadNvd(stack) {
+  const end = new Date();
+  return nvdByKeyword(stack, { pubStartDate: new Date(end - 14 * 864e5).toISOString(), pubEndDate: end.toISOString() });
+}
+
+// NVD's copy of the CISA exploited list for the stack: tagged links plus cisaExploitAdd / cisaActionDue dates.
+export const loadNvdKev = (stack) => nvdByKeyword(stack, { hasKev: '' });
 
 // Highest score any scorer (NVD or the CNA, e.g. Wordfence) gave this CVE.
 export function cvss(c) {
@@ -71,6 +77,59 @@ export function summary(data, s, seen) {
     if (fresh.length) lines.push(`${fresh.length} ${label[src]}: ${fresh.slice(0, 5).map(name[src]).join(', ')}${fresh.length > 5 ? ', …' : ''}`);
   }
   return lines;
+}
+
+// ---------- help links: only real http(s) links that came with the data ----------
+const web = (u) => /^https?:\/\//i.test(u || '');
+const nvdLink = (id) => ({ label: 'NVD', url: `https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}` });
+export const day = (iso) => (iso || '').slice(0, 10);
+
+export function cveLinks(c) {
+  const out = [];
+  const used = new Set();
+  for (const [tag, label] of [['Patch', 'Patch'], ['Vendor Advisory', 'Vendor advisory'], ['Mitigation', 'Mitigation']]) {
+    let n = 0;
+    for (const r of c.references || []) {
+      if (n < 2 && web(r.url) && !used.has(r.url) && (r.tags || []).includes(tag)) { used.add(r.url); out.push({ label, url: r.url }); n++; }
+    }
+  }
+  return [...out, nvdLink(c.id)];
+}
+
+export function kevLinks(v) {
+  const urls = [...new Set(((v.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, '')))];
+  const links = [];
+  for (const url of urls.slice(0, 3)) {
+    try { links.push({ label: new URL(url).hostname.replace(/^www\./, ''), url }); } catch { /* not a real URL */ }
+  }
+  return [...links, nvdLink(v.cveID)];
+}
+
+export const breachLinks = (b) => [{ label: 'Breach details', url: `https://haveibeenpwned.com/Breach/${encodeURIComponent(b.Name)}` }];
+
+// ---------- experimental patch checklist ----------
+// patched = NVD links to a patch; semi = only a vendor advisory or mitigation; pending = NVD tagged the links, no fix among them;
+// unchecked = NVD never tagged the links (new, or "Deferred": ~95% of recent WordPress CVEs), so they say nothing either way.
+// "Patched" means a fix exists, not that your own sites have it.
+export function patchStatus(c) {
+  const tags = new Set((c.references || []).flatMap((r) => r.tags || []));
+  if (tags.has('Patch')) return 'patched';
+  if (tags.has('Mitigation') || tags.has('Vendor Advisory')) return 'semi';
+  return tags.size ? 'pending' : 'unchecked';
+}
+
+// ticks = { cveId: 'YYYY-MM-DD' you ticked it }. Open items first (pending, semi, patched), ticked ones last.
+// Overdue = CISA's fix-by date passed in the last 30 days; older ones are all past due, so flagging them is noise.
+export function checklist(items, ticks, today) {
+  const order = { pending: 0, unchecked: 1, semi: 2, patched: 3 };
+  const recent = day(new Date(new Date(today) - 30 * 864e5).toISOString());
+  const byId = new Map();
+  for (const c of items) if (!byId.has(c.id)) byId.set(c.id, c);
+  return [...byId.values()].map((c) => {
+    const ticked = ticks[c.id] || null;
+    return { id: c.id, cve: c, status: patchStatus(c), published: day(c.published), kevAdded: c.cisaExploitAdd || null,
+      kevDue: c.cisaActionDue || null, ticked, overdue: !ticked && !!c.cisaActionDue && c.cisaActionDue < today && c.cisaActionDue >= recent };
+  }).sort((a, b) => (!!a.ticked - !!b.ticked) || order[a.status] - order[b.status] || b.published.localeCompare(a.published));
 }
 
 export async function ntfy(topic, title, message) {
