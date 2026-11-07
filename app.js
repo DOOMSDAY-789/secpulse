@@ -2,7 +2,7 @@ import { pwnedCount } from './pwned.js';
 import { bannerFor, privacyChoices, watchReady, watchAd, rewardLabel } from './ads.js';
 import {
   DEFAULTS, SOURCES, loadBreaches, loadKev, loadNvd, loadNvdKev, cvss, idOf, filter, isNew, summary, ntfy,
-  cveLinks, kevLinks, breachLinks, checklist, day,
+  cveLinks, kevLinks, breachLinks, checklist, day, fixLink, breachSteps,
 } from './feeds.js';
 
 const $ = (s) => document.querySelector(s);
@@ -30,7 +30,9 @@ function el(tag, props = {}, ...kids) {
 }
 const tag = (text, cls = '') => el('span', { className: `tag ${cls}`, textContent: text });
 const link = (href, text, cls = '') => el('a', { href, textContent: text, target: '_blank', rel: 'noopener', className: cls });
-const links = (list) => el('div', { className: 'links' }, ...list.map((l) => link(l.url, l.label, 'btn')));
+// fix: optional "Get the fix" link, drawn as the highlighted button on the right; any duplicate of it is dropped from the list
+const links = (list, fix = null) => el('div', { className: 'links' },
+  ...list.filter((l) => l.url !== fix?.url).map((l) => link(l.url, l.label, 'btn')), fix && link(fix.url, fix.label, 'btn fix'));
 const plain = (html) => new DOMParser().parseFromString(html || '', 'text/html').body.textContent; // inert parse, no scripts run
 const trim = (s, n) => (s.length > n ? `${s.slice(0, n)}…` : s);
 const english = (c) => c.descriptions.find((d) => d.lang === 'en')?.value || '';
@@ -39,13 +41,11 @@ function say(id, text, err = false, extra = []) {
   $(`#${id}-msg`).replaceChildren(text ? el('div', { className: `msg${err ? ' err' : ''}` }, text, extra.length > 0 && links(extra)) : '');
 }
 
-const breachAdvice = () => el('details', {},
-  el('summary', { textContent: 'What to do' }),
-  el('ol', {},
-    el('li', { textContent: 'If you had an account there, change that password, and anywhere you reused it.' }),
-    el('li', { textContent: 'Turn on 2-step login for your email and important accounts.' }),
-    el('li', { textContent: 'Expect phishing emails that use the leaked details. Don\'t click links in them.' })),
-  links([{ label: '2-step login guide (NCSC)', url: 'https://www.ncsc.gov.uk/collection/top-tips-for-staying-secure-online/activate-2-step-verification-on-your-email' }]));
+const breachAdvice = (b) => {
+  const { steps, links: help } = breachSteps(b);
+  return el('details', {}, el('summary', { textContent: 'What to do' }),
+    el('ol', {}, ...steps.map((t) => el('li', { textContent: t }))), links(help));
+};
 
 const cards = {
   breaches: (b) => el('div', { className: 'card' },
@@ -54,20 +54,20 @@ const cards = {
     el('div', { className: 'meta', textContent: `Leaked: ${b.DataClasses.join(', ')}` }),
     el('div', { textContent: trim(plain(b.Description), 280) }),
     links(breachLinks(b)),
-    breachAdvice()),
+    breachAdvice(b)),
   kev: (v) => el('div', { className: 'card' },
     el('b', {}, isNew(seen, 'kev', v.cveID) && tag('NEW', 'new'), v.knownRansomwareCampaignUse === 'Known' && tag('RANSOMWARE', 'Known'), `${v.vendorProject} ${v.product}`),
     el('div', { textContent: `${v.cveID} ${v.vulnerabilityName}` }),
     el('div', { className: 'meta', textContent: `Added ${v.dateAdded} · fix by ${v.dueDate}` }),
     el('div', { className: 'meta', textContent: trim(v.requiredAction, 160) }),
-    links(kevLinks(v))),
+    links(kevLinks(v), fixLink(v))),
   nvd: (c) => {
     const { score, sev } = cvss(c);
     return el('div', { className: 'card' },
       el('b', {}, isNew(seen, 'nvd', c.id) && tag('NEW', 'new'), tag(`${sev} ${score}`, sev), c.id),
       el('div', { className: 'meta', textContent: `Published ${day(c.published)}` }),
       el('div', { textContent: trim(english(c), 300) }),
-      links(cveLinks(c)));
+      links(cveLinks(c), fixLink(c)));
   },
 };
 
@@ -117,7 +117,7 @@ function renderChecklist() {
       el('b', {}, `${icon} `, r.kevAdded && tag('EXPLOITED', 'Known'), r.overdue && tag('OVERDUE', 'CRITICAL'), r.id),
       el('div', { className: 'meta', textContent: `${label} · published ${r.published}${r.kevAdded ? ` · CISA added ${r.kevAdded}` : ''}${r.kevDue ? ` · CISA fix-by ${r.kevDue}` : ''}` }),
       el('div', { textContent: trim(english(r.cve), 160) }),
-      links(cveLinks(r.cve)),
+      links(cveLinks(r.cve), fixLink(r.cve)),
       el('label', { className: 'tick' }, box, r.ticked ? ` I've patched this (ticked ${r.ticked})` : " I've patched this"));
   }));
 }

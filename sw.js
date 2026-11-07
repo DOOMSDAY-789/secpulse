@@ -1,5 +1,5 @@
 // Offline shell only. Live API calls (other origins) always go straight to the network.
-const CACHE = 'secpulse-v4';
+const CACHE = 'secpulse-v5';
 const SHELL = ['./', 'index.html', 'app.js', 'ads.js', 'pwned.js', 'feeds.js', 'privacy.html', 'manifest.webmanifest', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));

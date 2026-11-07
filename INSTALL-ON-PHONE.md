@@ -20,7 +20,7 @@ It asks for internet access, plus the advertising-ID permissions Google's ad lib
 3. Open SecPulse from the new icon.
 
 ## Windows PC
-- **The .exe:** `dist\SecPulse 1.1.0.exe` in this folder. Double-click it; nothing to install.
+- **The .exe:** `dist\SecPulse 1.2.0.exe` in this folder. Double-click it; nothing to install.
   The first time, Windows may say "Windows protected your PC" because the file isn't signed (signing costs money).
   Click **More info**, then **Run anyway**.
 - Or open the phone address in Chrome on the PC and click the install icon in the address bar.

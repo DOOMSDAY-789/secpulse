@@ -100,12 +100,83 @@ export function kevLinks(v) {
   const urls = [...new Set(((v.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, '')))];
   const links = [];
   for (const url of urls.slice(0, 3)) {
-    try { links.push({ label: new URL(url).hostname.replace(/^www\./, ''), url }); } catch { /* not a real URL */ }
+    try {
+      const label = new URL(url).hostname.replace(/^www\./, '');
+      if (!links.some((l) => l.label === label)) links.push({ label, url }); // one button per site
+    } catch { /* not a real URL */ }
   }
   return [...links, nvdLink(v.cveID)];
 }
 
 export const breachLinks = (b) => [{ label: 'Breach details', url: `https://haveibeenpwned.com/Breach/${encodeURIComponent(b.Name)}` }];
+
+// ---------- "Get the fix": where to download the update ----------
+const fix = (url) => ({ label: 'Get the fix', url });
+const wpSearch = (kind, name) => fix(`https://wordpress.org/${kind}/search/${encodeURIComponent(name.trim())}/`);
+const OFFICIAL = [ // [matches "vendor product" (KEV) or the description (NVD), official update page]
+  [/^wordpress (wordpress )?core\b|^wordpress (core )?(is|before|through|versions?|prior)\b/i, 'https://wordpress.org/documentation/article/updating-wordpress/'],
+  [/\bphpmyadmin\b/i, 'https://www.phpmyadmin.net/downloads/'],
+  [/\bphpmailer\b/i, 'https://github.com/PHPMailer/PHPMailer/releases'],
+  [/\bmysql\b/i, 'https://dev.mysql.com/downloads/mysql/'],
+  [/^php( group)? php\b|^php fastcgi|^(in )?php versions?\b|^php (before|through)\b/i, 'https://www.php.net/downloads.php'],
+];
+
+export function fixLink(x) {
+  if (x.cveID) { // CISA KEV entry
+    const name = `${x.vendorProject} ${x.product}`;
+    if (/^wordpress\b/i.test(x.vendorProject) && /plugin/i.test(x.product)) return wpSearch('plugins', x.product.replace(/\s*plugin\s*$/i, ''));
+    const known = OFFICIAL.find(([re]) => re.test(name));
+    if (known) return fix(known[1]);
+    const vendor = ((x.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, ''))
+      .find((u) => { try { return !/(^|\.)(cisa\.gov|nist\.gov)$/.test(new URL(u).hostname); } catch { return false; } });
+    return vendor ? fix(vendor) : null;
+  }
+  const text = (x.descriptions || []).find((d) => d.lang === 'en')?.value || '';
+  // Wordfence writes "The X plugin for WordPress", WPScan "The X WordPress plugin"
+  const wp = text.match(/^The (.+?) (?:(plugin|theme)s? for WordPress|WordPress (plugin|theme)s?)\b/);
+  if (wp) return wpSearch(`${wp[2] || wp[3]}s`, wp[1].split(/\s[–—:|-]\s/)[0]); // "Name – tagline": search the name only
+  const known = OFFICIAL.find(([re]) => re.test(text));
+  if (known) return fix(known[1]);
+  const patch = (x.references || []).find((r) => web(r.url) && (r.tags || []).includes('Patch'));
+  return patch ? fix(patch.url) : null;
+}
+
+// ---------- breach advice that matches what leaked ----------
+const NCSC = 'https://www.ncsc.gov.uk/collection/top-tips-for-staying-secure-online';
+export function breachSteps(b) {
+  const has = (...names) => names.some((n) => (b.DataClasses || []).includes(n));
+  const site = b.Title || b.Name || 'that site';
+  const steps = [];
+  const links = [{ label: 'Am I in it? (HIBP)', url: 'https://haveibeenpwned.com/' }];
+  if (b.IsStealerLog || b.IsMalware) {
+    steps.push('This data was stolen by malware on people\'s own devices. Run a virus scan, then change the passwords saved in your browser.');
+    links.push({ label: 'Hacked device help (NCSC)', url: 'https://www.ncsc.gov.uk/guidance/hacked-device-action-to-take' });
+  }
+  if (has('Passwords')) {
+    steps.push(`Change your ${site} password, and every other site where you used the same one. A password manager makes a different password for each site easy.`);
+    links.push({ label: 'Password managers (NCSC)', url: `${NCSC}/password-managers` });
+  } else if (!b.IsStealerLog && !b.IsSpamList) steps.push('Passwords weren\'t in this leak, so changing yours there is optional.');
+  if (has('Auth tokens')) steps.push(`Log out of ${site} on all devices: leaked login tokens can get in without your password.`);
+  if (has('Security questions and answers')) steps.push(`Change your security questions and answers on ${site}, and anywhere you gave the same answers.`);
+  if (has('Credit cards', 'Partial credit card data', 'Bank account numbers', 'Payment histories', 'Account balances')) {
+    steps.push(`Check your bank and card statements for payments you don't recognise, and tell your bank straight away.${has('Credit cards') ? ' Ask for a new card.' : ''}`);
+  }
+  if (has('Government issued IDs', 'Passport numbers', 'Social security numbers', 'Dates of birth')) {
+    steps.push('Check your credit report (free in the UK from Experian, Equifax and TransUnion) for accounts or loans you didn\'t open.');
+  }
+  if (has('Phone numbers')) steps.push('Expect scam texts and calls. Ask your mobile provider to put a PIN or password on your account, so nobody can move your number to their SIM.');
+  if (has('Private messages', 'Email messages', 'Sexual orientations') || b.IsSensitive) {
+    steps.push('Private details leaked. If someone emails demanding money to keep them quiet, don\'t reply or pay: report it.');
+  }
+  steps.push(`Turn on 2-step login for ${site} if it has it, and always for your email.`);
+  links.push({ label: '2-step login guide (NCSC)', url: `${NCSC}/activate-2-step-verification-on-your-email` },
+    { label: 'Which sites have 2-step login', url: 'https://2fa.directory/' });
+  if (has('Email addresses', 'Phone numbers', 'Names') || b.IsSpamList) {
+    steps.push('Expect scam emails that use the leaked details to look real. Don\'t click their links; go to the site yourself.');
+    links.push({ label: 'Spotting scam emails (NCSC)', url: 'https://www.ncsc.gov.uk/guidance/phishing' });
+  }
+  return { steps, links };
+}
 
 // ---------- experimental patch checklist ----------
 // patched = NVD links to a patch; semi = only a vendor advisory or mitigation; pending = NVD tagged the links, no fix among them;

@@ -1,7 +1,7 @@
 // Self-check for the password leak check. Run: node test.mjs
 import assert from 'node:assert/strict';
 import { sha1Hex, countInRange, pwnedCount } from './pwned.js';
-import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist } from './feeds.js';
+import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist, fixLink, breachSteps } from './feeds.js';
 
 // Known SHA-1 of "password".
 assert.equal(await sha1Hex('password'), '5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8');
@@ -78,7 +78,37 @@ assert.equal(rows.find((r) => r.id === 'C').overdue, true);
 assert.equal(rows.find((r) => r.id === 'D').ticked, '2026-11-07');
 assert.equal(checklist([{ id: 'OLD', published: '2021-01-01', cisaActionDue: '2021-11-17', references: [] }], {}, '2026-11-07')[0].overdue, false, 'years-old deadline is not flagged');
 
+// "Get the fix": the official update page for known products, else the vendor's own link, else nothing.
+const kev = (vendorProject, product, notes = '') => ({ cveID: 'CVE-1', vendorProject, product, notes });
+const desc = (text, references = []) => ({ id: 'CVE-2', descriptions: [{ lang: 'en', value: text }], references });
+assert.equal(fixLink(kev('WordPress', 'Core', 'https://wordpress.org/news/x/ ; https://www.cisa.gov/y')).url, 'https://wordpress.org/documentation/article/updating-wordpress/');
+assert.equal(fixLink(kev('WordPress', 'Snap Creek Duplicator Plugin')).url, 'https://wordpress.org/plugins/search/Snap%20Creek%20Duplicator/');
+assert.equal(fixLink(kev('PHP Group', 'PHP')).url, 'https://www.php.net/downloads.php');
+assert.equal(fixLink(kev('phpMyAdmin', 'phpMyAdmin')).url, 'https://www.phpmyadmin.net/downloads/');
+assert.equal(fixLink(kev('WebPros', 'cPanel', 'https://www.cisa.gov/a ; https://support.cpanel.net/fix ; https://nvd.nist.gov/b')).url, 'https://support.cpanel.net/fix', 'vendor link, not CISA/NVD');
+assert.equal(fixLink(kev('ThinkPHP', 'ThinkPHP', 'https://nvd.nist.gov/vuln/detail/CVE-1')), null, 'no fix link known');
+assert.equal(fixLink(desc('The WS Form LITE – Drag & Drop Contact Form Builder plugin for WordPress is vulnerable to XSS')).url, 'https://wordpress.org/plugins/search/WS%20Form%20LITE/');
+assert.equal(fixLink(desc('The Astra theme for WordPress is vulnerable')).url, 'https://wordpress.org/themes/search/Astra/');
+assert.equal(fixLink(desc('The WHIZZ WordPress plugin through 1.1.8 does not validate')).url, 'https://wordpress.org/plugins/search/WHIZZ/', 'WPScan wording');
+assert.equal(fixLink(kev('WordPress', 'WordPress Core', 'https://wordpress.org/news/x/')).url, 'https://wordpress.org/documentation/article/updating-wordpress/');
+assert.equal(fixLink(desc('Vulnerability in the MySQL Server product of Oracle MySQL (component: InnoDB).')).url, 'https://dev.mysql.com/downloads/mysql/');
+assert.equal(fixLink(desc('In PHP versions 8.1.* before 8.1.29, a bug', [])).url, 'https://www.php.net/downloads.php');
+assert.equal(fixLink(desc('Some library bug', [{ url: 'https://x.example/patch', tags: ['Patch'] }])).url, 'https://x.example/patch');
+assert.equal(fixLink(desc('Some library bug', [{ url: 'javascript:alert(1)', tags: ['Patch'] }])), null);
+
+// Breach advice depends on what leaked.
+const steps = (b) => breachSteps({ Title: 'Acme', DataClasses: [], ...b }).steps.join('\n');
+assert.match(steps({ DataClasses: ['Email addresses', 'Passwords'] }), /Change your Acme password/);
+assert.match(steps({ DataClasses: ['Email addresses'] }), /Passwords weren't in this leak/);
+assert.match(steps({ DataClasses: ['Partial credit card data'] }), /statements/);
+assert.match(steps({ DataClasses: ['Phone numbers'] }), /SIM/);
+assert.match(steps({ DataClasses: ['Security questions and answers'] }), /security questions/);
+assert.match(steps({ DataClasses: ['Government issued IDs'] }), /credit report/);
+assert.match(steps({ IsStealerLog: true }), /malware/);
+assert.ok(!/statements|SIM|credit report/.test(steps({ DataClasses: ['Email addresses', 'Passwords'] })), 'no advice for things that did not leak');
+assert.ok(breachSteps({ Title: 'Acme', DataClasses: ['Passwords'] }).links.every((l) => /^https:\/\//.test(l.url)));
+
 // Live call against the real API.
 const live = await pwnedCount('password');
 assert.ok(live > 1000, `"password" should be heavily leaked, got ${live}`);
-console.log(`ok - 30 checks passed (live: "password" seen ${live.toLocaleString()} times)`);
+console.log(`ok - 53 checks passed (live: "password" seen ${live.toLocaleString()} times)`);
