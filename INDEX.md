@@ -24,6 +24,7 @@ Start here. Read in this order, then stop and work:
 | privacy.html | Privacy policy, live on the website |
 | manifest.webmanifest, icon-*.png | Install name and icons |
 | package.json | Scripts, version, and build.files (the files that go into the apk and exe) |
+| package-lock.json | Exact package versions; npm writes it, don't hand-edit |
 | capacitor.config.json | Android app ID and name |
 | INSTALL-ON-PHONE.md | How Ryan installs each version |
 
