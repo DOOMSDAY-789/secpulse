@@ -178,8 +178,86 @@ export function breachSteps(b) {
   return { steps, links };
 }
 
+// ---------- "How this affects you": one plain line per card ----------
+const IMPACT = [ // [matches the bug's name or description, what an attacker gets]. First match wins, so order matters.
+  [/cross-site request forgery|\bcsrf\b/i, 'trick a logged-in admin into changing settings just by getting them to click a link'],
+  [/sql injection/i, 'read or change its database: user emails, password hashes, orders'],
+  [/remote code execution|code injection|command injection|arbitrary (file upload|code)|unrestricted upload|deserialization/i, 'take over the server, steal its data and plant malware for visitors'],
+  [/(arbitrary|limited) file deletion/i, 'delete its files, which on WordPress can hand them the whole site'],
+  [/cross-site scripting|\bxss\b/i, 'run scripts in visitors\' browsers to steal logins or send them to scam pages'],
+  [/verify (that a payment|the authenticity of)/i, 'send it fake requests, such as marking an order paid without paying'],
+  [/arbitrary shortcode/i, 'run the site\'s built-in features without permission, which can expose private content'],
+  // Wordfence: "missing capability check", "authorization bypass"; WPScan: "does not perform an authorisation check", "verify that a user"
+  [/authentication bypass|improper authentication|privilege escalation|capability(,| check| or)|authori[sz](ation|e)|access control|insecure direct object|\bidor\b|(verify|check) (that|whether) (a|the) (user|requester)|restrict (access|who)|verify ownership|permission check/i, 'get in as an admin or another user, or change things only they should'],
+  [/path traversal|directory traversal|file inclusion|arbitrary file (read|download)|file download|information (disclosure|exposure)|sensitive information/i, 'read private files, such as the passwords in its config files'],
+  [/server-side request forgery|\bssrf\b/i, 'use the server to reach its private network'],
+  [/denial of service|\bdos\b/i, 'knock it offline'],
+];
+
+// Breach (HIBP), KEV or NVD item -> one sentence, or null when the bug type isn't recognised (never guess).
+export function affects(x) {
+  if (x.DataClasses) {
+    const has = (...n) => n.some((c) => x.DataClasses.includes(c));
+    if (x.IsStealerLog || x.IsMalware) return 'If you\'re in it, malware on your own device sent your saved logins to criminals.';
+    if (has('Passwords')) return 'If you had an account here, criminals may have your password and will try it on your other accounts.';
+    if (has('Credit cards', 'Partial credit card data', 'Bank account numbers')) return 'If you had an account here, your card or bank details may be out there.';
+    if (x.IsSpamList) return 'If your email is in it, expect more spam and scam emails.';
+    return 'If you had an account here, expect scam emails and calls that use these details to look real.';
+  }
+  const text = x.cveID ? `${x.vulnerabilityName} ${x.shortDescription || ''}` : (x.descriptions || []).find((d) => d.lang === 'en')?.value || '';
+  const hit = IMPACT.find(([re]) => re.test(text));
+  return hit ? `If a website (yours, or one you use) runs this without the update, attackers can ${hit[1]}.` : null;
+}
+
+// ---------- site check: past leaks (HIBP list, on device) + Mozilla Observatory grade ----------
+// "shop.com", "www.shop.com/x" or "https://shop.com" -> "shop.com"-style host, or null if it isn't a web address.
+export function hostOf(input) {
+  const s = (input || '').trim();
+  try {
+    const u = new URL(/^[a-z][\w+.-]*:\/\//i.test(s) ? s : `https://${s}`);
+    const host = u.hostname.toLowerCase();
+    return /^https?:$/.test(u.protocol) && /^([a-z0-9-]+\.)+[a-z][a-z0-9-]+$/.test(host) ? host : null;
+  } catch { return null; }
+}
+
+export function pastLeaks(host, breaches) {
+  const h = host.replace(/^www\./, '');
+  return breaches.filter((b) => { const d = (b.Domain || '').toLowerCase(); return d && (h === d || h.endsWith(`.${d}`)); });
+}
+
+// Only the host name goes to Mozilla. Scans are cached by Mozilla for a minute, so repeats are cheap.
+export async function observatory(host, get = fetch) {
+  let res;
+  try { res = await get(`https://observatory-api.mdn.mozilla.net/api/v2/scan?host=${encodeURIComponent(host)}`, { method: 'POST' }); } catch {
+    throw new Error('Could not reach Mozilla Observatory. Are you offline?');
+  }
+  const j = await res.json().catch(() => ({}));
+  if (!res.ok || j.error || !j.grade) throw new Error(`Mozilla couldn't scan ${host}${j.message ? ` (${j.message})` : ''}. Check the spelling, or the site may be down.`);
+  return j;
+}
+
+// leaks = null when the HIBP list didn't load. Leaks from the last 3 years make a site "careful"; older ones are only listed.
+export function siteReport(host, scan, leaks, today) {
+  const g = scan.grade[0]; // "A+" -> "A"
+  const since = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
+  const recent = (leaks || []).filter((b) => b.BreachDate >= since);
+  const level = 'DEF'.includes(g) ? 'weak' : g === 'C' || recent.length ? 'careful' : 'good';
+  const head = {
+    good: `🟢 ${host} looks well looked after.`,
+    careful: `🟡 Be careful with ${host}.`,
+    weak: `🔴 ${host} has weak security. Stay away, or at least don't enter card details or a password you use anywhere else.`,
+  }[level];
+  const meaning = { A: 'strong protections switched on', B: 'most protections switched on', C: 'some protections missing' }[g] || 'most basic protections missing';
+  const lines = [head, `Mozilla security grade ${scan.grade} (${scan.tests_passed} of ${scan.tests_quantity} checks passed): ${meaning}.`];
+  if (leaks === null) lines.push('The leak list didn\'t load, so past leaks weren\'t checked. Press Refresh and try again.');
+  else if (!leaks.length) lines.push('No known data leaks (Have I Been Pwned).');
+  else for (const b of leaks.slice(0, 3)) lines.push(`Leaked data in ${b.BreachDate.slice(0, 4)}: ${b.DataClasses.slice(0, 4).join(', ').toLowerCase()}.`);
+  lines.push('No check can prove a site is safe, and this one can\'t see whether the site runs an old PHP or WordPress version.');
+  return { level, text: lines.join('\n') };
+}
+
 // ---------- experimental patch checklist ----------
-// patched = NVD links to a patch; semi = only a vendor advisory or mitigation; pending = NVD tagged the links, no fix among them;
+// patched =NVD links to a patch; semi = only a vendor advisory or mitigation; pending = NVD tagged the links, no fix among them;
 // unchecked = NVD never tagged the links (new, or "Deferred": ~95% of recent WordPress CVEs), so they say nothing either way.
 // "Patched" means a fix exists, not that your own sites have it.
 export function patchStatus(c) {

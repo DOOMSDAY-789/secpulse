@@ -44,6 +44,7 @@
   input[type=checkbox] { width:auto; accent-color:var(--accent); transform:scale(1.2); margin-right:6px; }
   label.tick { display:flex; align-items:center; color:var(--text); font-size:14px; margin:10px 0 0; }
   .card.done { opacity:.6; }
+  .affects { margin-top:6px; padding-left:8px; border-left:3px solid var(--warn); font-size:14px; }
   .switch { display:flex; align-items:center; gap:4px; color:var(--text); font-size:15px; }
   [hidden] { display:none !important; }
 </style>
@@ -81,6 +82,15 @@
       <button class="act alt" type="button" id="selfcheck">Self-check</button>
     </form>
     <div id="pw-msg"></div>
+
+    <h2>Is this website safe to use?</h2>
+    <p class="note">Check a site before you sign up, log in or pay. Past leaks are looked up on this device; only the site name is sent to Mozilla's free security scanner. Nothing is saved.</p>
+    <form id="site-form" autocomplete="off">
+      <label for="site">Website</label>
+      <input id="site" inputmode="url" autocapitalize="off" spellcheck="false" placeholder="e.g. shop.example.com" required>
+      <button class="act">Check site</button>
+    </form>
+    <div id="site-msg"></div>
   </section>
 
   <section id="tab-checklist" hidden>
@@ -120,6 +130,7 @@
       (<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>).
       Password check: <a href="https://haveibeenpwned.com/Passwords" target="_blank" rel="noopener">Pwned Passwords</a>.
       Exploited bugs: <a href="https://www.cisa.gov/known-exploited-vulnerabilities-catalog" target="_blank" rel="noopener">CISA KEV catalog</a>.
+      Site grades: <a href="https://developer.mozilla.org/en-US/observatory" target="_blank" rel="noopener">Mozilla HTTP Observatory</a>.
       Alerts: <a href="https://ntfy.sh" target="_blank" rel="noopener">ntfy.sh</a>.</p>
     <p class="note">This product uses the NVD API but is not endorsed or certified by the NVD.</p>
   </section>
@@ -127,7 +138,7 @@
 <nav>
   <button data-tab="breaches">Hacked sites</button>
   <button data-tab="vulns">Vulns</button>
-  <button data-tab="password">Password</button>
+  <button data-tab="password">Checks</button>
   <button data-tab="checklist" id="nav-checklist" hidden>Checklist</button>
   <button data-tab="more">More</button>
 </nav>

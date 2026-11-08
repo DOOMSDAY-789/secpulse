@@ -2,7 +2,7 @@ import { pwnedCount } from './pwned.js';
 import { bannerFor, privacyChoices, watchReady, watchAd, rewardLabel } from './ads.js';
 import {
   DEFAULTS, SOURCES, loadBreaches, loadKev, loadNvd, loadNvdKev, cvss, idOf, filter, isNew, summary, ntfy,
-  cveLinks, kevLinks, breachLinks, checklist, day, fixLink, breachSteps,
+  cveLinks, kevLinks, breachLinks, checklist, day, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport,
 } from './feeds.js';
 
 const $ = (s) => document.querySelector(s);
@@ -47,12 +47,15 @@ const breachAdvice = (b) => {
     el('ol', {}, ...steps.map((t) => el('li', { textContent: t }))), links(help));
 };
 
+const affectsYou = (x) => { const t = affects(x); return t && el('div', { className: 'affects' }, el('strong', { textContent: 'Affects you: ' }), t); };
+
 const cards = {
   breaches: (b) => el('div', { className: 'card' },
     el('b', {}, isNew(seen, 'breaches', b.Name) && tag('NEW', 'new'), `${b.Title}${b.Domain ? ` (${b.Domain})` : ''}`),
     el('div', { className: 'meta', textContent: `Added ${day(b.AddedDate)} · breached ${b.BreachDate} · ${b.PwnCount.toLocaleString()} accounts${b.IsVerified ? '' : ' · unverified'}` }),
     el('div', { className: 'meta', textContent: `Leaked: ${b.DataClasses.join(', ')}` }),
     el('div', { textContent: trim(plain(b.Description), 280) }),
+    affectsYou(b),
     links(breachLinks(b)),
     breachAdvice(b)),
   kev: (v) => el('div', { className: 'card' },
@@ -60,6 +63,7 @@ const cards = {
     el('div', { textContent: `${v.cveID} ${v.vulnerabilityName}` }),
     el('div', { className: 'meta', textContent: `Added ${v.dateAdded} · fix by ${v.dueDate}` }),
     el('div', { className: 'meta', textContent: trim(v.requiredAction, 160) }),
+    affectsYou(v),
     links(kevLinks(v), fixLink(v))),
   nvd: (c) => {
     const { score, sev } = cvss(c);
@@ -67,6 +71,7 @@ const cards = {
       el('b', {}, isNew(seen, 'nvd', c.id) && tag('NEW', 'new'), tag(`${sev} ${score}`, sev), c.id),
       el('div', { className: 'meta', textContent: `Published ${day(c.published)}` }),
       el('div', { textContent: trim(english(c), 300) }),
+      affectsYou(c),
       links(cveLinks(c), fixLink(c)));
   },
 };
@@ -117,6 +122,7 @@ function renderChecklist() {
       el('b', {}, `${icon} `, r.kevAdded && tag('EXPLOITED', 'Known'), r.overdue && tag('OVERDUE', 'CRITICAL'), r.id),
       el('div', { className: 'meta', textContent: `${label} · published ${r.published}${r.kevAdded ? ` · CISA added ${r.kevAdded}` : ''}${r.kevDue ? ` · CISA fix-by ${r.kevDue}` : ''}` }),
       el('div', { textContent: trim(english(r.cve), 160) }),
+      affectsYou(r.cve),
       links(cveLinks(r.cve), fixLink(r.cve)),
       el('label', { className: 'tick' }, box, r.ticked ? ` I've patched this (ticked ${r.ticked})` : " I've patched this"));
   }));
@@ -162,6 +168,22 @@ $('#selfcheck').addEventListener('click', async () => {
     const n = await pwnedCount('password');
     say('pw', n > 1000 ? `Self-check passed: "password" is known leaked (${n.toLocaleString()} times).` : `Self-check failed: got ${n}.`, n <= 1000);
   } catch (err) { say('pw', `Self-check failed: ${err.message}`, true); }
+});
+
+// ---------- site check ----------
+$('#site-form').addEventListener('submit', async (e) => {
+  e.preventDefault();
+  const host = hostOf($('#site').value);
+  if (!host) return say('site', 'That doesn\'t look like a website address. Try something like shop.example.com.', true);
+  say('site', `Checking ${host}…`);
+  try {
+    const scan = await observatory(host);
+    const leaks = data.breaches.length ? pastLeaks(host, data.breaches) : null;
+    const { level, text } = siteReport(host, scan, leaks, today());
+    const report = /^https:\/\/developer\.mozilla\.org\//.test(scan.details_url) ? scan.details_url
+      : `https://developer.mozilla.org/en-US/observatory/analyze?host=${encodeURIComponent(host)}`;
+    say('site', text, level === 'weak', [{ label: 'Full Mozilla report', url: report }, ...(leaks || []).slice(0, 3).flatMap(breachLinks)]);
+  } catch (err) { say('site', err.message, true); }
 });
 
 // ---------- alerts ----------

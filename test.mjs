@@ -1,7 +1,7 @@
 // Self-check for the password leak check. Run: node test.mjs
 import assert from 'node:assert/strict';
 import { sha1Hex, countInRange, pwnedCount } from './pwned.js';
-import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist, fixLink, breachSteps } from './feeds.js';
+import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport } from './feeds.js';
 
 // Known SHA-1 of "password".
 assert.equal(await sha1Hex('password'), '5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8');
@@ -108,7 +108,42 @@ assert.match(steps({ IsStealerLog: true }), /malware/);
 assert.ok(!/statements|SIM|credit report/.test(steps({ DataClasses: ['Email addresses', 'Passwords'] })), 'no advice for things that did not leak');
 assert.ok(breachSteps({ Title: 'Acme', DataClasses: ['Passwords'] }).links.every((l) => /^https:\/\//.test(l.url)));
 
+// "How this affects you": from what leaked, or from the bug type; nothing when the type isn't known.
+assert.match(affects({ DataClasses: ['Email addresses', 'Passwords'] }), /your password/);
+assert.match(affects({ DataClasses: ['Credit cards'] }), /card or bank/);
+assert.match(affects({ DataClasses: ['Email addresses'] }), /scam emails/);
+assert.match(affects({ DataClasses: [], IsStealerLog: true }), /malware/);
+assert.match(affects({ cveID: 'C', vulnerabilityName: 'WordPress File Manager Remote Code Execution Vulnerability' }), /take over the server/);
+assert.match(affects(desc('The X plugin for WordPress is vulnerable to SQL Injection via the id parameter')), /database/);
+assert.match(affects(desc('The X plugin for WordPress is vulnerable to Cross-Site Request Forgery ... to inject malicious web scripts')), /click a link/, 'CSRF wins over the script wording');
+assert.match(affects(desc('The X plugin for WordPress is vulnerable to Stored Cross-Site Scripting')), /visitors' browsers/);
+assert.match(affects(desc('The X plugin for WordPress is vulnerable to unauthorized modification of data due to a missing capability check')), /admin or another user/);
+assert.equal(affects(desc('Some odd bug nobody has named')), null);
+
+// Site check: host parsing, past leaks, the verdict, and only the host goes to Mozilla.
+assert.equal(hostOf('https://www.Shop.example.com/cart?x=1'), 'www.shop.example.com');
+assert.equal(hostOf(' shop.example.com '), 'shop.example.com');
+assert.equal(hostOf('javascript:alert(1)'), null);
+assert.equal(hostOf('ftp://files.example.com'), null);
+assert.equal(hostOf('not a site'), null);
+assert.equal(hostOf('localhost'), null);
+const leakList = [{ Name: 'A', Domain: 'adobe.com', BreachDate: '2013-10-04', DataClasses: ['Passwords'] }, { Name: 'B', Domain: 'notadobe.com', BreachDate: '2025-01-01', DataClasses: [] }];
+assert.deepEqual(pastLeaks('www.adobe.com', leakList).map((b) => b.Name), ['A'], 'www and subdomains match, look-alikes do not');
+assert.deepEqual(pastLeaks('shop.adobe.com', leakList).map((b) => b.Name), ['A']);
+const scan = (grade) => ({ grade, tests_passed: 8, tests_quantity: 12 });
+assert.equal(siteReport('a.com', scan('A+'), [], '2026-11-08').level, 'good');
+assert.equal(siteReport('a.com', scan('A'), leakList.slice(0, 1), '2026-11-08').level, 'good', 'a 2013 leak alone is old news');
+assert.equal(siteReport('a.com', scan('B'), [{ ...leakList[1], DataClasses: ['Email addresses'] }], '2026-11-08').level, 'careful', 'recent leak');
+assert.equal(siteReport('a.com', scan('C'), [], '2026-11-08').level, 'careful');
+assert.equal(siteReport('a.com', scan('F'), [], '2026-11-08').level, 'weak');
+assert.match(siteReport('a.com', scan('B'), null, '2026-11-08').text, /leak list didn't load/);
+let asked = '';
+const fakeMoz = async (url, opts) => { asked = `${opts.method} ${url}`; return { ok: true, json: async () => scan('B') }; };
+assert.equal((await observatory('shop.example.com', fakeMoz)).grade, 'B');
+assert.equal(asked, 'POST https://observatory-api.mdn.mozilla.net/api/v2/scan?host=shop.example.com');
+await assert.rejects(observatory('x.example', async () => ({ ok: false, json: async () => ({ error: 'invalid-hostname', message: 'Invalid hostname' }) })), /Invalid hostname/);
+
 // Live call against the real API.
 const live = await pwnedCount('password');
 assert.ok(live > 1000, `"password" should be heavily leaked, got ${live}`);
-console.log(`ok - 53 checks passed (live: "password" seen ${live.toLocaleString()} times)`);
+console.log(`ok - 80 checks passed (live: "password" seen ${live.toLocaleString()} times)`);

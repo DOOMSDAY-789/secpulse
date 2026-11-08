@@ -30,6 +30,8 @@
 <ul>
   <li><b>Password check:</b> your password is turned into a SHA-1 hash on your device. Only the first 5 characters of that hash are sent to
     <a href="https://haveibeenpwned.com/Passwords">Pwned Passwords</a> (run by Have I Been Pwned). Your password and the rest of the hash never leave your device, and the password is never saved.</li>
+  <li><b>Site check:</b> only when you press Check site, the site name you typed (for example shop.example.com, never a full link or anything you entered on that site) is sent to Mozilla's
+    <a href="https://developer.mozilla.org/en-US/observatory">HTTP Observatory</a>, which scans that site's public security settings. Mozilla's scan results for a site are public. Past leaks are looked up on your device in the list already downloaded from Have I Been Pwned. The app does not save what you checked.</li>
   <li><b>Feeds:</b> the app downloads public lists from Have I Been Pwned, the US National Vulnerability Database (NVD) and CISA (via GitHub). These are ordinary web requests, so those services see your IP address, as any website would. Your stack keywords are sent to NVD as search words.</li>
   <li><b>Alerts (optional):</b> only if you press a push button, or set up the PC check, a short message listing public breach and vulnerability news is sent to <a href="https://ntfy.sh">ntfy.sh</a> under your topic name. Anyone who knows the topic name can read those messages.</li>
 </ul>
