@@ -2,6 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src 'unsafe-inline'; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>SecPulse privacy policy</title>
 <style>
@@ -14,7 +15,7 @@
 <body>
 <main>
 <h1>SecPulse privacy policy</h1>
-<p>Last updated: 7 November 2026 (ads added). Applies to the SecPulse web app, Android app and Windows app.</p>
+<p>Last updated: 10 November 2026 (alert topic wording). Applies to the SecPulse web app, Android app and Windows app.</p>
 
 <h2>The short version</h2>
 <p>SecPulse has no accounts and no analytics. We do not collect your personal data, and what you set in the app stays on your device. The Android app shows Google ads, and Google collects some data for those (see Ads below). The web app and Windows app have no ads.</p>
@@ -33,7 +34,7 @@
   <li><b>Site check:</b> only when you press Check site, the site name you typed (for example shop.example.com, never a full link or anything you entered on that site) is sent to Mozilla's
     <a href="https://developer.mozilla.org/en-US/observatory">HTTP Observatory</a>, which scans that site's public security settings. Mozilla's scan results for a site are public. Past leaks are looked up on your device in the list already downloaded from Have I Been Pwned. The app does not save what you checked.</li>
   <li><b>Feeds:</b> the app downloads public lists from Have I Been Pwned, the US National Vulnerability Database (NVD) and CISA (via GitHub). These are ordinary web requests, so those services see your IP address, as any website would. Your stack keywords are sent to NVD as search words.</li>
-  <li><b>Alerts (optional):</b> only if you press a push button, or set up the PC check, a short message listing public breach and vulnerability news is sent to <a href="https://ntfy.sh">ntfy.sh</a> under your topic name. Anyone who knows the topic name can read those messages.</li>
+  <li><b>Alerts (optional):</b> only if you press a push button, or set up the PC check, a short message listing public breach and vulnerability news is sent to <a href="https://ntfy.sh">ntfy.sh</a> under your topic name. Anyone who knows the topic name can read those messages and send fake ones to it, so keep it private. Real SecPulse alerts never ask you to log in, pay or install anything.</li>
 </ul>
 
 <h2>Ads (Android app only)</h2>

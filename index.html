@@ -2,6 +2,8 @@
 <html lang="en">
 <head>
 <meta charset="utf-8">
+<!-- Lock-down: only this app's own script files run, and it can only talk to the six services below. Adding a new service? Add it here too (npm test checks). -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'unsafe-inline'; img-src 'self'; manifest-src 'self'; worker-src 'self'; connect-src 'self' https://haveibeenpwned.com https://api.pwnedpasswords.com https://raw.githubusercontent.com https://services.nvd.nist.gov https://observatory-api.mdn.mozilla.net https://ntfy.sh; base-uri 'none'; form-action 'none'">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <meta name="theme-color" content="#0f172a">
 <meta name="apple-mobile-web-app-capable" content="yes">
@@ -104,7 +106,7 @@
 
   <section id="tab-more" hidden>
     <h2>Phone alerts (ntfy)</h2>
-    <p class="note">Install the free <b>ntfy</b> app, tap +, and subscribe to the topic below. Anyone who knows the topic name can read it, so keep the random one. Messages only contain public breach and CVE news.</p>
+    <p class="note">Install the free <b>ntfy</b> app, tap +, and subscribe to the topic below. Anyone who knows the topic name can read it and send fake alerts to it, so keep the random one and don't share it. Real alerts only list public breach and CVE news: they never ask you to log in, pay or install anything.</p>
     <label for="topic">ntfy topic</label>
     <input id="topic" autocapitalize="off" spellcheck="false">
     <button class="act alt" id="test-push">Send test alert</button>

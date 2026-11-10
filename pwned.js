@@ -21,5 +21,9 @@ export async function pwnedCount(password, fetchFn = fetch) {
     headers: { 'Add-Padding': 'true' },
   });
   if (!res.ok) throw new Error(`Pwned Passwords answered ${res.status}`);
-  return countInRange(await res.text(), hash.slice(5));
+  const body = await res.text();
+  // A real reply is hundreds of SUFFIX:COUNT rows. Anything else (a network filter's block page, an empty reply)
+  // must never read as "not found", or the app would call a leaked password fine.
+  if (!/^[0-9A-F]{35}:\d+\s*$/m.test(body)) throw new Error('Pwned Passwords sent an unexpected reply, so this password was NOT checked. A network filter may be blocking it.');
+  return countInRange(body, hash.slice(5));
 }

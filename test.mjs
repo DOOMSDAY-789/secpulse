@@ -1,7 +1,8 @@
 // Self-check for the password leak check. Run: node test.mjs
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
 import { sha1Hex, countInRange, pwnedCount } from './pwned.js';
-import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport } from './feeds.js';
+import { cvss, summary, filter, cveLinks, kevLinks, breachLinks, patchStatus, checklist, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport, lookalike, weakTopic } from './feeds.js';
 
 // Known SHA-1 of "password".
 assert.equal(await sha1Hex('password'), '5BAA61E4C9B93F3F0682250B6CF8331B7EE68FD8');
@@ -131,8 +132,8 @@ const leakList = [{ Name: 'A', Domain: 'adobe.com', BreachDate: '2013-10-04', Da
 assert.deepEqual(pastLeaks('www.adobe.com', leakList).map((b) => b.Name), ['A'], 'www and subdomains match, look-alikes do not');
 assert.deepEqual(pastLeaks('shop.adobe.com', leakList).map((b) => b.Name), ['A']);
 const scan = (grade) => ({ grade, tests_passed: 8, tests_quantity: 12 });
-assert.equal(siteReport('a.com', scan('A+'), [], '2026-11-08').level, 'good');
-assert.equal(siteReport('a.com', scan('A'), leakList.slice(0, 1), '2026-11-08').level, 'good', 'a 2013 leak alone is old news');
+assert.equal(siteReport('a.com', scan('A+'), [], '2026-11-08').level, 'nosigns');
+assert.equal(siteReport('a.com', scan('A'), leakList.slice(0, 1), '2026-11-08').level, 'nosigns', 'a 2013 leak alone is old news');
 assert.equal(siteReport('a.com', scan('B'), [{ ...leakList[1], DataClasses: ['Email addresses'] }], '2026-11-08').level, 'careful', 'recent leak');
 assert.equal(siteReport('a.com', scan('C'), [], '2026-11-08').level, 'careful');
 assert.equal(siteReport('a.com', scan('F'), [], '2026-11-08').level, 'weak');
@@ -143,7 +144,83 @@ assert.equal((await observatory('shop.example.com', fakeMoz)).grade, 'B');
 assert.equal(asked, 'POST https://observatory-api.mdn.mozilla.net/api/v2/scan?host=shop.example.com');
 await assert.rejects(observatory('x.example', async () => ({ ok: false, json: async () => ({ error: 'invalid-hostname', message: 'Invalid hostname' }) })), /Invalid hostname/);
 
+// ---------- security audit, 10 Nov 2026: nobody gets to use SecPulse to reach its users ----------
+const read = (f) => fs.readFileSync(new URL(f, import.meta.url), 'utf8');
+
+// The site check never vouches. Its best result is "no warning signs", and it says a scam site can pass too.
+const best = siteReport('a.com', scan('A+'), [], '2026-11-08').text;
+assert.ok(!/🟢|🟩|✅|well looked after/.test(best), 'no green light for any site');
+assert.match(best, /doesn't make it safe/);
+assert.match(best, /not who runs it/, 'the Mozilla grade is about settings, not honesty');
+
+// Look-alike names get a warning even with a perfect Mozilla grade.
+assert.deepEqual(lookalike('paypa1.com'), { brand: 'paypal', disguised: true });
+assert.deepEqual(lookalike('m1crosoft-login.com'), { brand: 'microsoft', disguised: true }, 'a 1 can stand for i');
+assert.deepEqual(lookalike('rnicrosoft.com'), { brand: 'microsoft', disguised: true }, 'rn reads as m');
+assert.deepEqual(lookalike('amaz0n-support.com'), { brand: 'amazon', disguised: true });
+assert.deepEqual(lookalike('paypal.com.secure-login.net'), { brand: 'paypal', disguised: false }, 'real name used as a subdomain of someone else');
+assert.deepEqual(lookalike('paypal-login.pages.dev'), { brand: 'paypal', disguised: false });
+assert.deepEqual(lookalike('xn--pypal-4ve.com'), { foreign: true }, 'look-alike alphabet');
+for (const real of ['paypal.com', 'www.paypal.com', 'smile.amazon.co.uk', 'hmrc.gov.uk', 'office365.com', 'mysite.wordpress.com', 'pineapple.com', 'globalcloud.com', 'steamcommunity.com', 'flashflashrevolution.com', 'shop.example.com']) {
+  assert.equal(lookalike(real), null, `${real} is not a look-alike`);
+}
+const copycat = siteReport('paypa1.com', scan('A+'), [], '2026-11-08');
+assert.equal(copycat.level, 'weak', 'a disguised name is red whatever its grade');
+assert.match(copycat.text, /may be a fake[\s\S]*read like "paypal"/);
+assert.equal(siteReport('paypal-support.com', scan('A+'), [], '2026-11-08').level, 'careful');
+assert.equal(siteReport('xn--pypal-4ve.com', scan('A+'), [], '2026-11-08').level, 'careful');
+assert.equal(hostOf('https://paypal.com@evil.example/login'), null, 'name@host links are refused');
+assert.equal(hostOf(`${'a'.repeat(250)}.com`), null, 'too long to be a real name');
+
+// The password check never says "not found" unless Pwned Passwords really answered.
+const reply = (text) => async () => ({ ok: true, text: async () => text });
+await assert.rejects(pwnedCount(secret, reply('')), /NOT checked/, 'empty reply');
+await assert.rejects(pwnedCount(secret, reply('<html>Blocked by your network filter</html>')), /NOT checked/, 'block page');
+
+// Links from the feeds: https only, and a "Get the fix" link the feed picked names its site.
+const httpCve = desc('Some library bug', [{ url: 'http://x.example/patch', tags: ['Patch'] }]);
+assert.equal(fixLink(httpCve), null, 'no fix button for a plain http link');
+assert.deepEqual(cveLinks(httpCve).map((l) => l.label), ['NVD']);
+assert.deepEqual(kevLinks({ cveID: 'CVE-8', notes: 'http://old.example/a ; https://ok.example/b' }).map((l) => l.label), ['ok.example', 'NVD']);
+assert.equal(fixLink(kev('WebPros', 'cPanel', 'http://support.cpanel.net/fix')), null);
+assert.equal(fixLink(desc('Some library bug', [{ url: 'https://www.x.example/patch', tags: ['Patch'] }])).label, 'Get the fix (x.example)');
+assert.equal(fixLink(kev('WebPros', 'cPanel', 'https://support.cpanel.net/fix')).label, 'Get the fix (support.cpanel.net)');
+assert.equal(fixLink(kev('PHP Group', 'PHP')).label, 'Get the fix', 'our own official links need no site name');
+assert.equal(cvss({ metrics: { cvssMetricV31: [{ cvssData: { baseScore: 9.9, baseSeverity: 'btn fix' } }] } }).sev, 'UNRATED', 'feed text never becomes a CSS class');
+
+// Alerts: a short topic can be guessed, and whoever guesses it can send fake alerts.
+assert.equal(weakTopic('ryan'), true);
+assert.equal(weakTopic('secpulse-0123456789ab'), false);
+
+// Page lock-down (Content-Security-Policy): only our own script files run, and only the services the code really calls are reachable.
+const page = read('index.html');
+const csp = page.match(/http-equiv="Content-Security-Policy" content="([^"]+)"/)[1];
+const rule = (name) => csp.split(';').map((r) => r.trim().split(/\s+/)).find((r) => r[0] === name)?.slice(1) || [];
+assert.deepEqual(rule('default-src'), ["'none'"]);
+assert.deepEqual(rule('script-src'), ["'self'"], 'no inline script, no eval, no other site\'s script');
+assert.deepEqual(rule('form-action'), ["'none'"], 'the password form can never be sent anywhere');
+const called = [...`${read('feeds.js')}${read('pwned.js')}`.matchAll(/(?:fetch|fetchFn|getJSON|get)\(\s*[`'"](https:\/\/[^/`'"$]+)/g)].map((m) => m[1]);
+assert.equal(called.length, 6, `expected 6 services, found ${called}`);
+assert.deepEqual([...called].sort(), rule('connect-src').filter((s) => s !== "'self'").sort(), 'the allowed services are exactly the ones the code calls');
+assert.ok(!/<script(?![^>]*\ssrc=)/i.test(page) && !/\son\w+=/i.test(page), 'index.html has no inline script or on-click attributes');
+assert.match(read('privacy.html'), /Content-Security-Policy" content="default-src 'none'/);
+assert.match(read('app.js'), /window\.top !== window\.self/, 'refuses to run inside another site\'s frame');
+
+// Windows app: the window can't be sent to another page, asks for no permissions, and only opens https links outside.
+const win = read('main.js');
+assert.match(win, /on\('will-navigate', \(e\) => e\.preventDefault\(\)\)/);
+assert.match(win, /setPermissionRequestHandler\(.*allow\(false\)\)/);
+assert.match(win, /if \(url\.startsWith\('https:\/\/'\)\) shell\.openExternal\(url\);\s*return \{ action: 'deny' \}/);
+assert.ok(!/nodeIntegration|contextIsolation|sandbox|webSecurity|preload/.test(win), 'Electron\'s safe defaults are left alone');
+
+// Android app: internet is the only permission asked for, and app data stays out of cloud backups.
+const manifest = read('android/app/src/main/AndroidManifest.xml');
+assert.deepEqual([...manifest.matchAll(/uses-permission android:name="([^"]+)"/g)].map((m) => m[1]), ['android.permission.INTERNET']);
+assert.match(manifest, /android:allowBackup="false"/);
+assert.ok(!/usesCleartextTraffic="true"|debuggable="true"/.test(manifest));
+
 // Live call against the real API.
 const live = await pwnedCount('password');
 assert.ok(live > 1000, `"password" should be heavily leaked, got ${live}`);
-console.log(`ok - 80 checks passed (live: "password" seen ${live.toLocaleString()} times)`);
+const checks = (read('test.mjs').match(/\bassert\.\w+\(/g) || []).length;
+console.log(`ok - ${checks} checks passed (live: "password" seen ${live.toLocaleString()} times)`);

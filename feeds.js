@@ -53,7 +53,8 @@ export function cvss(c) {
   const m = c.metrics || {};
   const all = [...(m.cvssMetricV40 || []), ...(m.cvssMetricV31 || []), ...(m.cvssMetricV30 || [])].map((x) => x.cvssData);
   const d = all.sort((a, b) => b.baseScore - a.baseScore)[0];
-  return d ? { score: d.baseScore, sev: d.baseSeverity } : { score: 0, sev: 'UNRATED' };
+  // sev is also used as a CSS class, so only the known words get through.
+  return d ? { score: d.baseScore, sev: ['CRITICAL', 'HIGH', 'MEDIUM', 'LOW'].includes(d.baseSeverity) ? d.baseSeverity : 'UNRATED' } : { score: 0, sev: 'UNRATED' };
 }
 
 export const idOf = { breaches: (b) => b.Name, kev: (v) => v.cveID, nvd: (c) => c.id };
@@ -79,8 +80,10 @@ export function summary(data, s, seen) {
   return lines;
 }
 
-// ---------- help links: only real http(s) links that came with the data ----------
-const web = (u) => /^https?:\/\//i.test(u || '');
+// ---------- help links: only real https links that came with the data ----------
+// https only: a plain http page can be swapped on the way by anyone on the same Wi-Fi, and the Windows app won't open one anyway.
+const web = (u) => { try { return new URL(u).protocol === 'https:'; } catch { return false; } };
+const site = (u) => new URL(u).hostname.replace(/^www\./, '');
 const nvdLink = (id) => ({ label: 'NVD', url: `https://nvd.nist.gov/vuln/detail/${encodeURIComponent(id)}` });
 export const day = (iso) => (iso || '').slice(0, 10);
 
@@ -96,14 +99,14 @@ export function cveLinks(c) {
   return [...out, nvdLink(c.id)];
 }
 
+// The https links in a CISA note, in order, without repeats.
+const noteUrls = (v) => [...new Set(((v.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, '')))].filter(web);
+
 export function kevLinks(v) {
-  const urls = [...new Set(((v.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, '')))];
   const links = [];
-  for (const url of urls.slice(0, 3)) {
-    try {
-      const label = new URL(url).hostname.replace(/^www\./, '');
-      if (!links.some((l) => l.label === label)) links.push({ label, url }); // one button per site
-    } catch { /* not a real URL */ }
+  for (const url of noteUrls(v).slice(0, 3)) {
+    const label = site(url);
+    if (!links.some((l) => l.label === label)) links.push({ label, url }); // one button per site
   }
   return [...links, nvdLink(v.cveID)];
 }
@@ -112,6 +115,8 @@ export const breachLinks = (b) => [{ label: 'Breach details', url: `https://have
 
 // ---------- "Get the fix": where to download the update ----------
 const fix = (url) => ({ label: 'Get the fix', url });
+// A link the feed picked (not one of ours) names its site on the button, so you see where it goes before you tap.
+const feedFix = (url) => ({ label: `Get the fix (${site(url)})`, url });
 const wpSearch = (kind, name) => fix(`https://wordpress.org/${kind}/search/${encodeURIComponent(name.trim())}/`);
 const OFFICIAL = [ // [matches "vendor product" (KEV) or the description (NVD), official update page]
   [/^wordpress (wordpress )?core\b|^wordpress (core )?(is|before|through|versions?|prior)\b/i, 'https://wordpress.org/documentation/article/updating-wordpress/'],
@@ -127,9 +132,8 @@ export function fixLink(x) {
     if (/^wordpress\b/i.test(x.vendorProject) && /plugin/i.test(x.product)) return wpSearch('plugins', x.product.replace(/\s*plugin\s*$/i, ''));
     const known = OFFICIAL.find(([re]) => re.test(name));
     if (known) return fix(known[1]);
-    const vendor = ((x.notes || '').match(/https?:\/\/[^\s;]+/g) || []).map((u) => u.replace(/[.,)]+$/, ''))
-      .find((u) => { try { return !/(^|\.)(cisa\.gov|nist\.gov)$/.test(new URL(u).hostname); } catch { return false; } });
-    return vendor ? fix(vendor) : null;
+    const vendor = noteUrls(x).find((u) => !/(^|\.)(cisa\.gov|nist\.gov)$/.test(new URL(u).hostname));
+    return vendor ? feedFix(vendor) : null;
   }
   const text = (x.descriptions || []).find((d) => d.lang === 'en')?.value || '';
   // Wordfence writes "The X plugin for WordPress", WPScan "The X WordPress plugin"
@@ -138,7 +142,7 @@ export function fixLink(x) {
   const known = OFFICIAL.find(([re]) => re.test(text));
   if (known) return fix(known[1]);
   const patch = (x.references || []).find((r) => web(r.url) && (r.tags || []).includes('Patch'));
-  return patch ? fix(patch.url) : null;
+  return patch ? feedFix(patch.url) : null;
 }
 
 // ---------- breach advice that matches what leaked ----------
@@ -216,8 +220,41 @@ export function hostOf(input) {
   try {
     const u = new URL(/^[a-z][\w+.-]*:\/\//i.test(s) ? s : `https://${s}`);
     const host = u.hostname.toLowerCase();
-    return /^https?:$/.test(u.protocol) && /^([a-z0-9-]+\.)+[a-z][a-z0-9-]+$/.test(host) ? host : null;
+    // No "name@host" links: everything before the @ is ignored by browsers, a trick to make evil.example read like a real site.
+    return /^https?:$/.test(u.protocol) && !u.username && !u.password && host.length <= 253 && /^([a-z0-9-]+\.)+[a-z][a-z0-9-]+$/.test(host) ? host : null;
   } catch { return null; }
+}
+
+// ---------- look-alike names: scam sites copy well-known names (paypa1.com, amazon-support.example) ----------
+// ponytail: a short list of the names scammers copy most, and a rough "who owns this name" rule instead of the full
+// Public Suffix List. It only ever adds a warning; a name that isn't caught here is NOT thereby safe.
+const INSIDE = ['paypal', 'amazon', 'google', 'microsoft', 'office365', 'netflix', 'facebook', 'instagram', 'whatsapp', 'linkedin',
+  'dropbox', 'wordpress', 'barclays', 'natwest', 'royalmail', 'binance', 'coinbase']; // flagged anywhere in a word: paypalsecure
+const WHOLE = ['apple', 'gmail', 'outlook', 'icloud', 'ebay', 'yahoo', 'lloyds', 'santander', 'halifax', 'nationwide', 'hsbc', 'monzo',
+  'revolut', 'hmrc', 'dvla', 'evri', 'steam']; // also everyday words or parts of them (pineapple, revolution), so whole words only
+const BRANDS = [...INSIDE, ...WHOLE];
+// Characters that pass for letters at a glance. A 1 can stand for l (paypa1) or i (m1crosoft), so both are tried.
+const SWAPS = [[/rn/g, 'm'], [/vv/g, 'w'], [/0/g, 'o'], [/3/g, 'e'], [/4/g, 'a'], [/5/g, 's'], [/7/g, 't'], [/8/g, 'b']];
+const unswap = (s, one) => SWAPS.reduce((t, [re, to]) => t.replace(re, to), s.replace(/1/g, one));
+// "shop.amazon.co.uk" -> "amazon": the part of the name its owner registered.
+function ownName(host) {
+  const p = host.split('.');
+  return p.at(p.length > 2 && p.at(-1).length === 2 && ['co', 'com', 'org', 'net', 'gov', 'ac'].includes(p.at(-2)) ? -3 : -2);
+}
+
+// null, or { brand, disguised } when the name borrows a well-known name it doesn't own, or { foreign: true } for look-alike alphabets.
+// disguised = swapped characters were needed to read it as the brand (paypa1 -> paypal): nobody does that by accident.
+export function lookalike(host) {
+  if (host.split('.').some((l) => l.startsWith('xn--'))) return { foreign: true };
+  const own = ownName(host);
+  const has = (w, b) => (WHOLE.includes(b) ? w === b : w.includes(b));
+  for (const word of host.split(/[.-]/)) {
+    const plain = BRANDS.find((b) => has(word, b));
+    if (plain && own !== plain) return { brand: plain, disguised: false };
+    const swapped = !plain && BRANDS.find((b) => has(unswap(word, 'l'), b) || has(unswap(word, 'i'), b));
+    if (swapped) return { brand: swapped, disguised: true };
+  }
+  return null;
 }
 
 export function pastLeaks(host, breaches) {
@@ -237,18 +274,24 @@ export async function observatory(host, get = fetch) {
 }
 
 // leaks = null when the HIBP list didn't load. Leaks from the last 3 years make a site "careful"; older ones are only listed.
+// There is no "safe" level on purpose: a scam site can score A+ with Mozilla, so the best result is "no warning signs".
 export function siteReport(host, scan, leaks, today) {
   const g = scan.grade[0]; // "A+" -> "A"
   const since = `${Number(today.slice(0, 4)) - 3}${today.slice(4)}`;
   const recent = (leaks || []).filter((b) => b.BreachDate >= since);
-  const level = 'DEF'.includes(g) ? 'weak' : g === 'C' || recent.length ? 'careful' : 'good';
-  const head = {
-    good: `🟢 ${host} looks well looked after.`,
+  const look = lookalike(host);
+  const level = 'DEF'.includes(g) || look?.disguised ? 'weak' : g === 'C' || recent.length || look ? 'careful' : 'nosigns';
+  const head = look?.disguised ? `🔴 ${host} may be a fake. Don't log in or pay here.` : {
+    nosigns: `⚪ No warning signs found for ${host}. That doesn't make it safe: a scam site can pass these checks too, so check the address letter by letter.`,
     careful: `🟡 Be careful with ${host}.`,
     weak: `🔴 ${host} has weak security. Stay away, or at least don't enter card details or a password you use anywhere else.`,
   }[level];
   const meaning = { A: 'strong protections switched on', B: 'most protections switched on', C: 'some protections missing' }[g] || 'most basic protections missing';
-  const lines = [head, `Mozilla security grade ${scan.grade} (${scan.tests_passed} of ${scan.tests_quantity} checks passed): ${meaning}.`];
+  const lines = [head];
+  if (look?.disguised) lines.push(`Its name uses swapped characters to read like "${look.brand}". Scam sites do this to copy well-known names.`);
+  else if (look?.brand) lines.push(`Its name has "${look.brand}" in it, but anyone can put a well-known name in an address. If you meant ${look.brand}, make sure this really is their site.`);
+  else if (look) lines.push('Its name uses letters from another alphabet, which can look identical to normal letters. Scam sites use this to copy well-known names.');
+  lines.push(`Mozilla security grade ${scan.grade} (${scan.tests_passed} of ${scan.tests_quantity} checks passed): ${meaning}. This grades how the site is set up, not who runs it.`);
   if (leaks === null) lines.push('The leak list didn\'t load, so past leaks weren\'t checked. Press Refresh and try again.');
   else if (!leaks.length) lines.push('No known data leaks (Have I Been Pwned).');
   else for (const b of leaks.slice(0, 3)) lines.push(`Leaked data in ${b.BreachDate.slice(0, 4)}: ${b.DataClasses.slice(0, 4).join(', ').toLowerCase()}.`);
@@ -280,6 +323,9 @@ export function checklist(items, ticks, today) {
       kevDue: c.cisaActionDue || null, ticked, overdue: !ticked && !!c.cisaActionDue && c.cisaActionDue < today && c.cisaActionDue >= recent };
   }).sort((a, b) => (!!a.ticked - !!b.ticked) || order[a.status] - order[b.status] || b.published.localeCompare(a.published));
 }
+
+// Anyone who knows or guesses a topic can read it and post fake alerts to it, so a short name gets a warning.
+export const weakTopic = (t) => (t || '').length < 16;
 
 export async function ntfy(topic, title, message) {
   if (!/^[\w-]{1,64}$/.test(topic || '')) throw new Error('Set a topic first (letters, numbers, - and _ only).');

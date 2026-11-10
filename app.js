@@ -2,8 +2,11 @@ import { pwnedCount } from './pwned.js';
 import { bannerFor, privacyChoices, watchReady, watchAd, rewardLabel } from './ads.js';
 import {
   DEFAULTS, SOURCES, loadBreaches, loadKev, loadNvd, loadNvdKev, cvss, idOf, filter, isNew, summary, ntfy,
-  cveLinks, kevLinks, breachLinks, checklist, day, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport,
+  cveLinks, kevLinks, breachLinks, checklist, day, fixLink, breachSteps, affects, hostOf, pastLeaks, observatory, siteReport, weakTopic,
 } from './feeds.js';
+
+// SecPulse never runs inside another site's page: a scam page could put the real app in a frame and dress it up as its own.
+if (window.top !== window.self) { document.body.replaceChildren('SecPulse can\'t run inside another page. Open it directly.'); throw new Error('framed'); }
 
 const $ = (s) => document.querySelector(s);
 const store = {
@@ -174,7 +177,7 @@ $('#selfcheck').addEventListener('click', async () => {
 $('#site-form').addEventListener('submit', async (e) => {
   e.preventDefault();
   const host = hostOf($('#site').value);
-  if (!host) return say('site', 'That doesn\'t look like a website address. Try something like shop.example.com.', true);
+  if (!host) return say('site', 'That doesn\'t look like a website address. Try something like shop.example.com. (A link with an @ in it is a known scam trick: the real site is the part after the @.)', true);
   say('site', `Checking ${host}…`);
   try {
     const scan = await observatory(host);
@@ -212,6 +215,7 @@ for (const key of ['watch', 'stack', 'severity', 'topic']) {
     if (key === 'watch') render('breaches');
     if (key === 'stack') { render('kev'); nvdDone = load('nvd').finally(() => { nvdLastAt = Date.now(); }); data.nvdKev = null; }
     if (key === 'severity') { render('nvd'); renderChecklist(); }
+    if (key === 'topic') say('alerts', weakTopic(settings.topic) ? 'That topic is short enough to guess. Anyone who guesses it can read your alerts and send you fake ones. Use a long random name.' : '', true);
   });
 }
 $('#exp-checklist').checked = settings.checklist;
